@@ -66,5 +66,10 @@ function doPost(e) {
   }
 }
 
-function clip_(v, n) { return String(v == null ? '' : v).slice(0, n); }
+// Text from a public endpoint must never become a spreadsheet formula (=IMPORTDATA(...) could leak cells):
+// anything starting with = + - @ or a tab/CR gets a leading apostrophe so it is stored as plain text.
+function clip_(v, n) {
+  const t = String(v == null ? '' : v).slice(0, n);
+  return /^[=+\-@\t\r]/.test(t) ? "'" + t : t;
+}
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
