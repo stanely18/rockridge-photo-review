@@ -185,7 +185,7 @@ async function syncNow() {
 }
 
 async function boot() {
-  ALL = (await (await fetch('data/photos.json')).json()).photos;
+  ALL = (await (await fetch('data/photos.json', { cache: 'no-cache' })).json()).photos;   // always revalidate: a cached old list showed 'undefined audit'
   const q = new URLSearchParams(location.search);
   const areas = [...new Set(ALL.map(p => p.area))];
   area = areas.includes(q.get('area')) ? q.get('area') : 'Rockridge';
