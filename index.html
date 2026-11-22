@@ -80,7 +80,6 @@ textarea{width:100%;min-height:90px;padding:8px;border:1px solid var(--line);bor
       <option value="all">All my photos</option>
       <option value="todo">Not reviewed yet</option>
       <option value="Yes">I marked Yes</option>
-      <option value="diff">I disagree with Stanley</option>
     </select>
     <label class="opt-line"><input type="checkbox" id="auto" checked> auto-advance</label>
     <button id="dlCsv">Download my review</button>
@@ -152,7 +151,6 @@ function visible() {
     if (f === 'opt') return !p.flagged;
     if (f === 'todo') return !r || !r.decision;
     if (f === 'Yes') return r && r.decision === 'Yes';
-    if (f === 'diff') return r && r.decision && ((r.decision === 'Yes') !== p.flagged);
     return true;
   });
 }
