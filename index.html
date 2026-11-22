@@ -58,6 +58,11 @@ textarea{width:100%;min-height:90px;padding:8px;border:1px solid var(--line);bor
 .opt-line{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:center;font-weight:400}
 .banner{background:var(--chip);border-radius:8px;padding:10px 14px;margin:12px 16px 0;max-width:1368px;font-size:14px}
 .hide{display:none}
+.testbar{background:var(--chip);border-bottom:2px solid var(--warn);font-size:14px}
+.testbar .tb{padding:8px 16px;max-width:1368px;margin:0 auto}
+.testbar ul{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--mute);max-height:120px;overflow:auto}
+.testbar button{padding:3px 10px;font-size:13px}
+button[aria-pressed=true]{background:var(--warn);border-color:var(--warn);color:#000}
 </style>
 </head>
 <body>
@@ -84,9 +89,16 @@ textarea{width:100%;min-height:90px;padding:8px;border:1px solid var(--line);bor
     <label class="opt-line"><input type="checkbox" id="auto" checked> auto-advance</label>
     <span class="prog" id="sync"></span>
     <button id="submitAll" class="hide">Submit now</button>
+    <button id="testBtn" class="hide" aria-pressed="false">Test mode</button>
     <button id="dlCsv">Download my review (backup)</button>
     <button id="switch">Switch name</button>
   </header>
+  <div class="testbar hide" id="testbar"><div class="tb">
+    <b>Test mode.</b> Your answers are labeled “(TEST)”, kept apart from your real answers, and do not count.
+    Rate a few photos and check that each one shows ✓ below and appears in the team sheet (tab “Responses”, reviewer “Your name (TEST)”).
+    <button id="chkConn">Check connection</button> <button id="clearTest">Clear test data</button> <button id="exitTest">Leave test mode</button>
+    <div id="connStatus" class="hint"></div><ul id="upLog"></ul>
+  </div></div>
   <div class="banner hide" id="banner"></div>
   <main>
     <div class="photo"><img id="img" alt="field photo"></div>
@@ -123,9 +135,18 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { if (!saveWarned) { saveWarned = true; alert('Your browser blocks saving. Please press "Download my review" often.'); } return false; } }
 };
-const key = () => 'rk-review-v1:' + who;
-const dkey = () => 'rk-dirty-v1:' + who;
+let test = false, lastUp = '';
+const sfx = () => (test ? ':TEST' : '');
+const key = () => 'rk-review-v1:' + who + sfx();
+const dkey = () => 'rk-dirty-v1:' + who + sfx();
+const rev = () => who + (test ? ' (TEST)' : '');
 let dirty = {}, syncTimer = null, syncing = false;
+const upLog = [];
+function logUp(msg) { upLog.unshift(new Date().toTimeString().slice(0, 8) + '  ' + msg); upLog.length = Math.min(upLog.length, 40); const ul = $('upLog'); ul.replaceChildren(...upLog.map(t => el('li', t))); }
+async function callSheet(payload) {
+  const res = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) });
+  return await res.json();
+}
 const ENDPOINT = (window.SHEET_ENDPOINT || '').trim();
 function rowFor(p) {
   const r = reviews[p.id] || {};
@@ -135,7 +156,7 @@ function rowFor(p) {
 function hasAnswer(p) { const r = reviews[p.id]; return r && (r.decision || r.severity != null || (r.comment || '').trim()); }
 function saveDirty() { store.set(dkey(), JSON.stringify(dirty)); }
 function showSync(msg) { $('sync').textContent = ENDPOINT ? msg : ''; }
-function pendingText() { const n = Object.keys(dirty).length; return n ? `Sheet: ${n} waiting to send` : 'Sheet: all sent ✓'; }
+function pendingText() { const n = Object.keys(dirty).length; return n ? `Sheet: ${n} waiting to send` : 'Sheet: all sent ✓' + (lastUp ? ` (last: ${lastUp})` : ''); }
 function markDirty(id) { if (!ENDPOINT) return; dirty[id] = (reviews[id] || {}).updated_at || ''; saveDirty(); showSync(pendingText()); clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 3000); }
 async function syncNow() {
   clearTimeout(syncTimer); syncTimer = null;
@@ -147,12 +168,14 @@ async function syncNow() {
   if (!rows.length) { saveDirty(); showSync(pendingText()); return; }
   syncing = true; showSync('Sheet: sending…');
   try {
-    const res = await fetch(ENDPOINT, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ reviewer: who, rows }) });
-    const out = await res.json();
+    const out = await callSheet({ reviewer: rev(), rows });
     if (!out.ok) throw new Error(out.error || 'rejected');
     Object.keys(sent).forEach(id => { if ((dirty[id] || '') === sent[id]) delete dirty[id]; });
+    (out.saved || rows.map(r => [r.photo_id, 'saved'])).forEach(([id, st]) => logUp(`${id} ✓ ${st} in the sheet`));
+    lastUp = `${rows[rows.length - 1].photo_id} ${new Date().toTimeString().slice(0, 5)}`;
     saveDirty(); showSync(pendingText());
   } catch (e) {
+    logUp('✗ not sent: ' + (e.message || e) + ' (will retry in 30 s)');
     showSync(`Sheet: ${Object.keys(dirty).length} waiting (will retry)`); syncTimer = setTimeout(syncNow, 30000);
   } finally { syncing = false; if (Object.keys(dirty).length && !syncTimer) syncTimer = setTimeout(syncNow, 3000); }
 }
@@ -173,12 +196,44 @@ function start(n) {
   who = n; mine = ALL.filter(p => p.who === n).sort((a, b) => Number(b.flagged) - Number(a.flagged) || a.time.localeCompare(b.time));
   try { reviews = JSON.parse(store.get(key()) || '{}'); } catch (e) { reviews = {}; }
   try { dirty = JSON.parse(store.get(dkey()) || '{}'); } catch (e) { dirty = {}; }
-  if (ENDPOINT) { $('submitAll').classList.remove('hide'); showSync(pendingText()); if (Object.keys(dirty).length) syncTimer = setTimeout(syncNow, 1500); }
+  if (ENDPOINT) { $('submitAll').classList.remove('hide'); $('testBtn').classList.remove('hide'); showSync(pendingText()); if (Object.keys(dirty).length) syncTimer = setTimeout(syncNow, 1500); }
   $('pick').classList.add('hide'); $('app').classList.remove('hide'); $('whoName').textContent = n;
   const sev = $('sevRow'); sev.replaceChildren();
   [0, 1, 2, 3].forEach(s => { const b = el('button', String(s)); b.dataset.s = s; b.onclick = () => setSev(s); sev.appendChild(b); });
   idx = (visible().find(i => !(reviews[mine[i].id] || {}).decision)) ?? 0;
   render();
+}
+async function checkConn() {
+  const s = $('connStatus'); s.textContent = 'Checking…';
+  try {
+    const out = await callSheet({ action: 'ping' });
+    if (!out.ok && out.error === 'unknown reviewer') s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 2). Ask Stanley to update it.';
+    else if (!out.ok) s.textContent = '✗ The sheet answered but refused: ' + (out.error || 'unknown');
+    else if (!(out.version >= 2)) s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 2). Ask Stanley to update it.';
+    else s.textContent = '✓ Connected to the team sheet (connector v' + out.version + ').';
+  } catch (e) { s.textContent = '✗ Could not reach the team sheet. Check your internet connection; if it still fails, tell Stanley.'; }
+}
+async function setTest(on) {
+  if (!who) return;
+  clearTimeout(syncTimer); syncTimer = null;
+  if (Object.keys(dirty).length) await syncNow();   // send what is waiting under the current mode first
+  test = on;
+  try { reviews = JSON.parse(store.get(key()) || '{}'); } catch (e) { reviews = {}; }
+  try { dirty = JSON.parse(store.get(dkey()) || '{}'); } catch (e) { dirty = {}; }
+  $('testbar').classList.toggle('hide', !test); $('testBtn').setAttribute('aria-pressed', String(test));
+  $('whoName').textContent = rev(); showSync(pendingText());
+  if (test) { upLog.length = 0; logUp('Test mode on. Answer a photo: a line with ✓ should appear here.'); checkConn(); }
+  idx = (visible().find(i => !(reviews[mine[i].id] || {}).decision)) ?? 0; render();
+}
+async function clearTestData() {
+  if (!test) return;
+  if (!confirm('Delete all your (TEST) answers from the team sheet and from this browser?')) return;
+  try {
+    const out = await callSheet({ action: 'clearTest', reviewer: rev() });
+    if (!out.ok) throw new Error(out.error || 'refused');
+    reviews = {}; dirty = {}; store.set(key(), '{}'); saveDirty();
+    logUp(`Cleared: ${out.deleted} test row(s) removed from the sheet.`); render();
+  } catch (e) { logUp('✗ Could not clear: ' + (e.message || e)); }
 }
 function visible() {
   const f = $('filter').value;
@@ -243,7 +298,11 @@ $('img').onclick = e => e.target.classList.toggle('big');
 $('filter').onchange = () => { const v = visible(); if (v.length && !v.includes(idx)) idx = v[0]; render(); };
 $('comment').oninput = e => { cur().comment = e.target.value; stamp(); };
 $('submitAll').onclick = () => { mine.forEach(p => { if (hasAnswer(p)) dirty[p.id] = (reviews[p.id] || {}).updated_at || ''; }); saveDirty(); syncNow(); };
-$('switch').onclick = () => { clearTimeout(syncTimer); syncTimer = null; $('app').classList.add('hide'); $('pick').classList.remove('hide'); };
+$('testBtn').onclick = () => setTest(!test);
+$('exitTest').onclick = () => setTest(false);
+$('chkConn').onclick = checkConn;
+$('clearTest').onclick = clearTestData;
+$('switch').onclick = () => { if (test) setTest(false); clearTimeout(syncTimer); syncTimer = null; $('app').classList.add('hide'); $('pick').classList.remove('hide'); };
 document.addEventListener('keydown', e => {
   if ($('app').classList.contains('hide') || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
   if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1);
@@ -254,7 +313,7 @@ $('dlCsv').onclick = () => {
   const esc = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
   const head = ['reviewer', 'photo_id', 'segment', 'required', 'stanley_label', 'my_decision', 'my_severity', 'my_comment', 'updated_at'];
   const lines = [head.join(',')];
-  mine.forEach(p => { const r = reviews[p.id] || {}; lines.push([who, p.id, p.segment, p.flagged ? 'yes' : 'no', p.flagged ? 'Yes' : 'No', r.decision, r.severity, r.comment, r.updated_at].map(esc).join(',')); });
+  mine.forEach(p => { const r = reviews[p.id] || {}; lines.push([rev(), p.id, p.segment, p.flagged ? 'yes' : 'no', p.flagged ? 'Yes' : 'No', r.decision, r.severity, r.comment, r.updated_at].map(esc).join(',')); });
   const a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' })); a.download = `rockridge_review_${who}.csv`; a.click();
 };
 boot();
