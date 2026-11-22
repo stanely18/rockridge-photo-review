@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rockridge Photo Review</title>
+<title>Sidewalk Audit Photo Review</title>
 <style>
 :root{--bg:#f6f6f4;--card:#fff;--ink:#1c1c1a;--mute:#6b6b66;--line:#d9d9d3;--yes:#c62828;--no:#1565c0;--ok:#2e7d32;--chip:#eceae4;--warn:#b26a00}
 @media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1f1f1d;--ink:#ecece8;--mute:#9a9a93;--line:#34342f;--yes:#ef5350;--no:#64b5f6;--ok:#66bb6a;--chip:#2a2a27;--warn:#ffb74d}}
@@ -67,8 +67,9 @@ button[aria-pressed=true]{background:var(--warn);border-color:var(--warn);color:
 </head>
 <body>
 <div id="pick" class="wrap">
-  <h1>Rockridge photo review</h1>
-  <p>CY290 audit team · field photos from the Rockridge sidewalk audit. Pick your name to review <b>your own</b> photos.</p>
+  <h1>Sidewalk audit photo review</h1>
+  <p>CY290 audit team · field photos from our two sidewalk audits. Pick the audit, then your name, to review <b>your own</b> photos.</p>
+  <div class="row" id="areaBtns"></div>
   <div class="who" id="whoBtns"></div>
   <p class="note"><b>How it works.</b> You first see the photos Stanley and the AI judged to show a clear sidewalk problem (<b>required</b>): say whether you agree. The remaining photos are <b>optional</b>: mark any you think show a problem. Your answers are saved in this browser only. When you are done, press <i>Download my review</i> and send the file to Stanley.</p>
   <p class="note">A sidewalk problem means a sidewalk that is <b>clearly</b> problematic for people with limited mobility (wheelchair, cane, stroller, low vision): blocked or too narrow, discontinuous, broken/uneven pavement, or a missing or unusable curb ramp.</p>
@@ -76,7 +77,7 @@ button[aria-pressed=true]{background:var(--warn);border-color:var(--warn);color:
 
 <div id="app" class="hide">
   <header>
-    <h1><span id="whoName"></span> · Rockridge photos</h1>
+    <h1><span id="whoName"></span> · <span id="areaName"></span> photos</h1>
     <span class="prog" id="prog"></span>
     <div class="bar"><i id="barfill"></i></div>
     <select id="filter" aria-label="Filter">
@@ -101,7 +102,7 @@ button[aria-pressed=true]{background:var(--warn);border-color:var(--warn);color:
   </div></div>
   <div class="banner hide" id="banner"></div>
   <main>
-    <div class="photo"><img id="img" alt="field photo"></div>
+    <div><div class="photo"><img id="img" alt="field photo"></div><div class="row hide" id="multi" style="margin-top:8px"></div></div>
     <div class="panel">
       <div><span class="id" id="pid"></span> <span class="hint" id="seg"></span></div>
       <div class="chips" id="chips"></div>
@@ -135,10 +136,11 @@ const store = {
   get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
   set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { if (!saveWarned) { saveWarned = true; alert('Your browser blocks saving. Please press "Download my review" often.'); } return false; } }
 };
-let test = false, lastUp = '';
+let test = false, lastUp = '', area = 'Rockridge', fileIdx = 0;
 const sfx = () => (test ? ':TEST' : '');
-const key = () => 'rk-review-v1:' + who + sfx();
-const dkey = () => 'rk-dirty-v1:' + who + sfx();
+const asfx = () => (area === 'Chinatown' ? '@Chinatown' : '');   // Rockridge keys stay as they were
+const key = () => 'rk-review-v1:' + who + asfx() + sfx();
+const dkey = () => 'rk-dirty-v1:' + who + asfx() + sfx();
 const rev = () => who + (test ? ' (TEST)' : '');
 let dirty = {}, syncTimer = null, syncing = false;
 const upLog = [];
@@ -150,7 +152,7 @@ async function callSheet(payload) {
 const ENDPOINT = (window.SHEET_ENDPOINT || '').trim();
 function rowFor(p) {
   const r = reviews[p.id] || {};
-  return { photo_id: p.id, segment: p.segment, required: p.flagged, stanley_label: p.flagged ? 'Yes' : 'No',
+  return { photo_id: p.id, area: p.area, segment: p.segment, required: p.flagged, stanley_label: p.flagged ? 'Yes' : 'No',
            decision: r.decision, severity: r.severity, comment: r.comment || '', updated_at: r.updated_at || '' };
 }
 function hasAnswer(p) { const r = reviews[p.id]; return r && (r.decision || r.severity != null || (r.comment || '').trim()); }
@@ -170,7 +172,9 @@ async function syncNow() {
   try {
     const out = await callSheet({ reviewer: rev(), rows });
     if (!out.ok) throw new Error(out.error || 'rejected');
-    Object.keys(sent).forEach(id => { if ((dirty[id] || '') === sent[id]) delete dirty[id]; });
+    if (out.saved) { const got = new Set(out.saved.map(x => x[0])), miss = rows.filter(r => !got.has(r.photo_id)).map(r => r.photo_id);
+      if (miss.length) throw new Error('the sheet did not store ' + miss.join(', ') + ' (its connector code is too old: ask Stanley to update it)'); }
+    Object.keys(sent).forEach(id => { if ((dirty[id] || '') === sent[id]) delete dirty[id]; });   // only after the sheet confirmed every row
     (out.saved || rows.map(r => [r.photo_id, 'saved'])).forEach(([id, st]) => logUp(`${id} ✓ ${st} in the sheet`));
     lastUp = `${rows[rows.length - 1].photo_id} ${new Date().toTimeString().slice(0, 5)}`;
     saveDirty(); showSync(pendingText());
@@ -182,22 +186,29 @@ async function syncNow() {
 
 async function boot() {
   ALL = (await (await fetch('data/photos.json')).json()).photos;
-  const names = [...new Set(ALL.map(p => p.who))].sort();
-  const box = $('whoBtns');
-  names.forEach(n => {
-    const mineN = ALL.filter(p => p.who === n), req = mineN.filter(p => p.flagged).length;
-    const b = el('button', n); b.append(el('small', `${mineN.length} photos · ${req} flagged (required) · ${mineN.length - req} optional`));
-    b.onclick = () => start(n); box.appendChild(b);
-  });
-  const q = new URLSearchParams(location.search).get('who');
-  if (q && names.includes(q)) start(q);
+  const q = new URLSearchParams(location.search);
+  const areas = [...new Set(ALL.map(p => p.area))];
+  area = areas.includes(q.get('area')) ? q.get('area') : 'Rockridge';
+  const drawNames = () => {
+    $('areaBtns').replaceChildren(...areas.map(a => { const n = ALL.filter(p => p.area === a).length;
+      const b = el('button', `${a} audit (${n})`); b.setAttribute('aria-pressed', String(a === area)); b.onclick = () => { area = a; drawNames(); }; return b; }));
+    const box = $('whoBtns'); box.replaceChildren();
+    [...new Set(ALL.filter(p => p.area === area).map(p => p.who))].sort().forEach(n => {
+      const mineN = ALL.filter(p => p.area === area && p.who === n), req = mineN.filter(p => p.flagged).length;
+      const b = el('button', n); b.append(el('small', `${mineN.length} photos · ${req} flagged (required) · ${mineN.length - req} optional`));
+      b.onclick = () => start(n); box.appendChild(b);
+    });
+  };
+  drawNames();
+  const w = q.get('who');
+  if (w && ALL.some(p => p.area === area && p.who === w)) start(w);
 }
 function start(n) {
-  who = n; mine = ALL.filter(p => p.who === n).sort((a, b) => Number(b.flagged) - Number(a.flagged) || a.time.localeCompare(b.time));
+  who = n; mine = ALL.filter(p => p.area === area && p.who === n).sort((a, b) => Number(b.flagged) - Number(a.flagged) || a.time.localeCompare(b.time));
   try { reviews = JSON.parse(store.get(key()) || '{}'); } catch (e) { reviews = {}; }
   try { dirty = JSON.parse(store.get(dkey()) || '{}'); } catch (e) { dirty = {}; }
   if (ENDPOINT) { $('submitAll').classList.remove('hide'); $('testBtn').classList.remove('hide'); showSync(pendingText()); if (Object.keys(dirty).length) syncTimer = setTimeout(syncNow, 1500); }
-  $('pick').classList.add('hide'); $('app').classList.remove('hide'); $('whoName').textContent = n;
+  $('pick').classList.add('hide'); $('app').classList.remove('hide'); $('whoName').textContent = n; $('areaName').textContent = area;
   const sev = $('sevRow'); sev.replaceChildren();
   [0, 1, 2, 3].forEach(s => { const b = el('button', String(s)); b.dataset.s = s; b.onclick = () => setSev(s); sev.appendChild(b); });
   idx = (visible().find(i => !(reviews[mine[i].id] || {}).decision)) ?? 0;
@@ -207,9 +218,9 @@ async function checkConn() {
   const s = $('connStatus'); s.textContent = 'Checking…';
   try {
     const out = await callSheet({ action: 'ping' });
-    if (!out.ok && out.error === 'unknown reviewer') s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 2). Ask Stanley to update it.';
+    if (!out.ok && out.error === 'unknown reviewer') s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 3). Ask Stanley to update it.';
     else if (!out.ok) s.textContent = '✗ The sheet answered but refused: ' + (out.error || 'unknown');
-    else if (!(out.version >= 2)) s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 2). Ask Stanley to update it.';
+    else if (!(out.version >= 3)) s.textContent = '✗ Connected, but the sheet runs old connector code (needs version 3). Ask Stanley to update it.';
     else s.textContent = '✓ Connected to the team sheet (connector v' + out.version + ').';
   } catch (e) { s.textContent = '✗ Could not reach the team sheet. Check your internet connection; if it still fails, tell Stanley.'; }
 }
@@ -250,13 +261,16 @@ function persist() { store.set(key(), JSON.stringify(reviews)); }
 function render() {
   const p = mine[idx]; if (!p) { $('img').removeAttribute('src'); $('pid').textContent = 'No photos in this view'; $('chips').replaceChildren(); $('stan').replaceChildren(); drawStrip(); return; }
   const r = reviews[p.id] || {};
-  $('img').src = 'photos/' + p.id + '.jpg'; $('img').classList.remove('big');
-  const nx = mine[idx + 1]; if (nx) new Image().src = 'photos/' + nx.id + '.jpg';
-  $('pid').textContent = p.id; $('seg').textContent = p.segment;
+  fileIdx = 0; const files = p.files || [p.id + '.jpg'];
+  const show = k => { fileIdx = k; $('img').src = 'photos/' + files[k]; $('img').classList.remove('big'); [...$('multi').children].forEach((b, i) => b.setAttribute('aria-pressed', String(i === k))); };
+  $('multi').replaceChildren(...files.map((f, k) => { const b = el('button', `Photo ${k + 1} of ${files.length}`); b.onclick = () => show(k); return b; }));
+  $('multi').classList.toggle('hide', files.length < 2); show(0);
+  const nx = mine[idx + 1]; if (nx) new Image().src = 'photos/' + (nx.files || [nx.id + '.jpg'])[0];
+  $('pid').textContent = p.id; $('seg').textContent = p.segment || p.area;
   const chips = $('chips'); chips.replaceChildren(p.flagged ? el('span', 'Required', 'chip req') : el('span', 'Optional', 'chip opt'));
   const m = $('meta'); m.replaceChildren();
   const maps = el('a', 'Open in Google Maps'); maps.href = `https://www.google.com/maps?q=${p.lat},${p.lon}`; maps.target = '_blank'; maps.rel = 'noopener';
-  [['Street segment', p.segment], ['Taken', p.time]].forEach(([k, v]) => m.append(el('b', k), el('span', v)));
+  [...(p.segment ? [['Street segment', p.segment]] : [['Audit', p.area]]), ['Taken', p.time]].forEach(([k, v]) => m.append(el('b', k), el('span', v)));
   m.append(el('b', 'Map'), maps);
   const s = $('stan'); s.replaceChildren();
   if (p.flagged) { s.append(el('div', `Stanley's final label: Problem (Yes), severity ${p.sev}`)); if (p.desc) s.append(el('div', p.desc)); }
@@ -282,7 +296,7 @@ function drawStrip() {
   });
 }
 function cur() { const p = mine[idx]; return reviews[p.id] || (reviews[p.id] = { decision: null, severity: null, comment: '' }); }
-function stamp() { const r = cur(); r.updated_at = new Date().toISOString().slice(0, 16).replace('T', ' '); persist(); $('status').textContent = 'Saved ' + r.updated_at; markDirty(mine[idx].id); }
+function stamp() { const r = cur(); r.updated_at = new Date().toISOString().slice(0, 19).replace('T', ' '); persist(); $('status').textContent = 'Saved ' + r.updated_at; markDirty(mine[idx].id); }
 function setDecision(v) { const r = cur(), auto = $('auto').checked; r.decision = (auto || r.decision !== v) ? v : null; stamp(); if (auto && r.decision) go(1); else render(); }
 function setSev(s) { const r = cur(); r.severity = r.severity === s ? null : s; stamp(); render(); }
 function go(d) {
@@ -311,10 +325,10 @@ document.addEventListener('keydown', e => {
 });
 $('dlCsv').onclick = () => {
   const esc = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
-  const head = ['reviewer', 'photo_id', 'segment', 'required', 'stanley_label', 'my_decision', 'my_severity', 'my_comment', 'updated_at'];
+  const head = ['reviewer', 'area', 'photo_id', 'segment', 'required', 'stanley_label', 'my_decision', 'my_severity', 'my_comment', 'updated_at'];
   const lines = [head.join(',')];
-  mine.forEach(p => { const r = reviews[p.id] || {}; lines.push([rev(), p.id, p.segment, p.flagged ? 'yes' : 'no', p.flagged ? 'Yes' : 'No', r.decision, r.severity, r.comment, r.updated_at].map(esc).join(',')); });
-  const a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' })); a.download = `rockridge_review_${who}.csv`; a.click();
+  mine.forEach(p => { const r = reviews[p.id] || {}; lines.push([rev(), p.area, p.id, p.segment, p.flagged ? 'yes' : 'no', p.flagged ? 'Yes' : 'No', r.decision, r.severity, r.comment, r.updated_at].map(esc).join(',')); });
+  const a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' })); a.download = `review_${area}_${who}.csv`; a.click();
 };
 boot();
 </script>

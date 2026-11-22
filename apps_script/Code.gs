@@ -1,5 +1,5 @@
 /**
- * Receives the Rockridge photo reviews from the static site and writes them into this spreadsheet.  (version 2)
+ * Receives the photo reviews (Rockridge and Chinatown audits) from the static site and writes them into this spreadsheet.  (version 3)
  * Container-bound script: open the Google Sheet -> Extensions -> Apps Script -> paste this file ->
  * Deploy -> Manage deployments -> pencil -> Version: New version -> Deploy.  First time: Deploy -> New deployment ->
  * Web app (Execute as: Me, Who has access: Anyone) and copy the Web app URL (ends in /exec).
@@ -9,15 +9,17 @@
  * The endpoint is public, so it only accepts the listed names, photo ids like R001, and clips text. Text that starts
  * with = + - @ is stored as plain text so it can never run as a formula.
  */
-const VERSION = 2;
+const VERSION = 3;
 const SHEET_NAME = 'Responses';
 const REVIEWERS = ['Clodagh', 'Michael', 'Stanley', 'Charlie'];
 const PHOTO_BASE = 'https://stanely18.github.io/rockridge-photo-review/photos/';
 const HEADERS = ['reviewer', 'photo_id', 'segment', 'required', 'stanley_label', 'my_decision', 'my_severity',
-                 'my_comment', 'photo_url', 'client_updated_at', 'received_at'];
+                 'my_comment', 'photo_url', 'client_updated_at', 'received_at', 'area'];
+// Photo ids: R001... = Rockridge audit, P01... = Chinatown audit.
+const AREAS = { R: 'Rockridge', P: 'Chinatown' };
 
 function doGet() {
-  return json_({ ok: true, version: VERSION, info: 'Rockridge review endpoint is running' });
+  return json_({ ok: true, version: VERSION, info: 'Photo review endpoint is running' });
 }
 
 function doPost(e) {
@@ -44,11 +46,11 @@ function doPost(e) {
     const fresh = [];
     const results = [];
     rows.forEach(function (r) {
-      if (!/^R\d{3}$/.test(String(r.photo_id))) return;
+      if (!/^[RP]\d{2,3}$/.test(String(r.photo_id))) return;
       const decision = r.decision === 'Yes' || r.decision === 'No' ? r.decision : '';
       const sev = [0, 1, 2, 3].indexOf(r.severity) > -1 ? String(r.severity) : '';
       const vals = [data.reviewer, r.photo_id, clip_(r.segment, 60), r.required ? 'yes' : 'no', clip_(r.stanley_label, 5),
-                    decision, sev, clip_(r.comment, 2000), PHOTO_BASE + r.photo_id + '.jpg', clip_(r.updated_at, 25), now];
+                    decision, sev, clip_(r.comment, 2000), PHOTO_BASE + r.photo_id + '.jpg', clip_(r.updated_at, 25), now, AREAS[String(r.photo_id).charAt(0)]];
       const key = data.reviewer + '|' + r.photo_id;
       if (index[key]) {
         sh.getRange(index[key], 1, 1, HEADERS.length).setValues([vals]);
@@ -74,6 +76,9 @@ function doPost(e) {
 function sheet_() {
   const ss = SpreadsheetApp.getActive();
   let sh = ss.getSheetByName(SHEET_NAME);
+  if (sh && sh.getRange(1, HEADERS.length).getValue() !== HEADERS[HEADERS.length - 1]) {
+    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');   // older sheets: add the new header(s)
+  }
   if (!sh) {
     sh = ss.insertSheet(SHEET_NAME);
     sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');

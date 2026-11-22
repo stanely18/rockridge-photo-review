@@ -1,6 +1,6 @@
-# Rockridge photo review
+# Sidewalk audit photo review
 
-A small static site for the CY290 sidewalk-audit team (Team SCCRM). Each teammate picks their own name and reviews the photos they took in Rockridge on the 2026-11-11 field audit.
+A small static site for the CY290 sidewalk-audit team (Team SCCRM). Pick the audit (Rockridge, 2026-11-11, or Chinatown, 2026-10-09), then your own name, and review the photos you took.
 
 - **Required:** photos that Stanley (with AI help) judged to show a clear sidewalk problem. Do you agree?
 - **Optional:** all the other photos. Mark any you think show a problem.
