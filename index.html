@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rockridge Photo Review</title>
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--ink:#1c1c1a;--mute:#6b6b66;--line:#d9d9d3;--yes:#c62828;--no:#1565c0;--ok:#2e7d32;--chip:#eceae4;--warn:#b26a00}
+@media (prefers-color-scheme:dark){:root{--bg:#141413;--card:#1f1f1d;--ink:#ecece8;--mute:#9a9a93;--line:#34342f;--yes:#ef5350;--no:#64b5f6;--ok:#66bb6a;--chip:#2a2a27;--warn:#ffb74d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:inherit}
+button,select,textarea,input{font:inherit;color:inherit}
+button,select{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 12px;cursor:pointer}
+button:hover{border-color:var(--mute)}
+.wrap{max-width:720px;margin:0 auto;padding:24px 16px}
+.wrap h1{font-size:22px;margin:0 0 6px}
+.who{display:grid;gap:10px;margin:18px 0}
+.who button{padding:14px 16px;text-align:left;font-size:16px}
+.who small{display:block;color:var(--mute);font-size:13px}
+.note{color:var(--mute);font-size:13px}
+header{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--card);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0}
+.prog{color:var(--mute);font-size:13px}
+.bar{flex:1;min-width:100px;height:6px;background:var(--chip);border-radius:3px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);width:0}
+main{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:16px;padding:16px;max-width:1400px;margin:0 auto}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+.photo{background:#000;border-radius:8px;overflow:hidden;display:flex;justify-content:center;align-items:center;min-height:240px}
+.photo img{max-width:100%;max-height:78vh;display:block;cursor:zoom-in}
+.photo img.big{max-height:none;cursor:zoom-out}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:14px;align-self:start}
+.id{font-size:22px;font-weight:700}
+.meta{color:var(--mute);font-size:13px;display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+.meta b{color:var(--ink);font-weight:600}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.chip{background:var(--chip);border-radius:12px;padding:2px 10px;font-size:13px}
+.chip.req{background:var(--yes);color:#fff}
+.chip.opt{background:var(--chip);color:var(--mute)}
+.stan{border-left:3px solid var(--line);padding-left:10px;color:var(--mute);font-size:14px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row button{flex:1;padding:10px;font-weight:600}
+button.sel-yes{background:var(--yes);border-color:var(--yes);color:#fff}
+button.sel-no{background:var(--no);border-color:var(--no);color:#fff}
+button.sel-sev{background:var(--ink);color:var(--card);border-color:var(--ink)}
+label{font-weight:600;font-size:13px;display:block;margin-bottom:4px}
+textarea{width:100%;min-height:90px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);resize:vertical}
+.nav{display:flex;justify-content:space-between;gap:8px;align-items:center}
+#status{font-size:12px;color:var(--mute);min-height:1em}
+.strip{display:flex;gap:5px;flex-wrap:wrap;padding:0 16px 24px;max-width:1400px;margin:0 auto;max-height:200px;overflow:auto}
+.strip button{padding:2px 8px;font-size:12px;border-radius:12px}
+.strip .done-yes{border-color:var(--yes);color:var(--yes)}
+.strip .done-no{border-color:var(--no);color:var(--no)}
+.strip .req{background:var(--chip)}
+.strip .partial{border-style:dashed;border-color:var(--warn);color:var(--warn)}
+.strip .cur{outline:2px solid var(--ink)}
+.hint{color:var(--mute);font-size:12px}
+.opt-line{font-size:13px;color:var(--mute);display:flex;gap:6px;align-items:center;font-weight:400}
+.banner{background:var(--chip);border-radius:8px;padding:10px 14px;margin:12px 16px 0;max-width:1368px;font-size:14px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div id="pick" class="wrap">
+  <h1>Rockridge photo review</h1>
+  <p>CY290 audit team · field photos from the Rockridge sidewalk audit. Pick your name to review <b>your own</b> photos.</p>
+  <div class="who" id="whoBtns"></div>
+  <p class="note"><b>How it works.</b> You first see the photos Stanley and the AI judged to show a clear sidewalk problem (<b>required</b>): say whether you agree. The remaining photos are <b>optional</b>: mark any you think show a problem. Your answers are saved in this browser only. When you are done, press <i>Download my review</i> and send the file to Stanley.</p>
+  <p class="note">A sidewalk problem means a sidewalk that is <b>clearly</b> problematic for people with limited mobility (wheelchair, cane, stroller, low vision): blocked or too narrow, discontinuous, broken/uneven pavement, or a missing or unusable curb ramp.</p>
+</div>
+
+<div id="app" class="hide">
+  <header>
+    <h1><span id="whoName"></span> · Rockridge photos</h1>
+    <span class="prog" id="prog"></span>
+    <div class="bar"><i id="barfill"></i></div>
+    <select id="filter" aria-label="Filter">
+      <option value="req">Required: flagged photos</option>
+      <option value="opt">Optional: other photos</option>
+      <option value="all">All my photos</option>
+      <option value="todo">Not reviewed yet</option>
+      <option value="Yes">I marked Yes</option>
+      <option value="diff">I disagree with Stanley</option>
+    </select>
+    <label class="opt-line"><input type="checkbox" id="auto" checked> auto-advance</label>
+    <button id="dlCsv">Download my review</button>
+    <button id="switch">Switch name</button>
+  </header>
+  <div class="banner hide" id="banner"></div>
+  <main>
+    <div class="photo"><img id="img" alt="field photo"></div>
+    <div class="panel">
+      <div><span class="id" id="pid"></span> <span class="hint" id="seg"></span></div>
+      <div class="chips" id="chips"></div>
+      <div class="meta" id="meta"></div>
+      <div class="stan" id="stan"></div>
+      <div>
+        <label>Is there a clear sidewalk problem here?</label>
+        <div class="row"><button id="bYes">Problem · Yes (Y)</button><button id="bNo">No problem · No (N)</button></div>
+      </div>
+      <div>
+        <label>Severity (0 = fine … 3 = cannot pass; keys 0–3, set it before Y/N)</label>
+        <div class="row" id="sevRow"></div>
+      </div>
+      <div>
+        <label>Comment (optional)</label>
+        <textarea id="comment" placeholder="What do you see? Leave empty if nothing to add."></textarea>
+        <div id="status"></div>
+      </div>
+      <div class="nav"><button id="prev">← Previous</button><span class="hint">Arrow keys move · 0–3 severity · Y / N answer</span><button id="next">Next →</button></div>
+    </div>
+  </main>
+  <div class="strip" id="strip"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const el = (tag, text, cls) => { const e = document.createElement(tag); if (text != null) e.textContent = text; if (cls) e.className = cls; return e; };
+let ALL = [], mine = [], who = null, reviews = {}, idx = 0, saveWarned = false;
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { if (!saveWarned) { saveWarned = true; alert('Your browser blocks saving. Please press "Download my review" often.'); } return false; } }
+};
+const key = () => 'rk-review-v1:' + who;
+
+async function boot() {
+  ALL = (await (await fetch('data/photos.json')).json()).photos;
+  const names = [...new Set(ALL.map(p => p.who))].sort();
+  const box = $('whoBtns');
+  names.forEach(n => {
+    const mineN = ALL.filter(p => p.who === n), req = mineN.filter(p => p.flagged).length;
+    const b = el('button', n); b.append(el('small', `${mineN.length} photos · ${req} flagged (required) · ${mineN.length - req} optional`));
+    b.onclick = () => start(n); box.appendChild(b);
+  });
+  const q = new URLSearchParams(location.search).get('who');
+  if (q && names.includes(q)) start(q);
+}
+function start(n) {
+  who = n; mine = ALL.filter(p => p.who === n).sort((a, b) => Number(b.flagged) - Number(a.flagged) || a.time.localeCompare(b.time));
+  try { reviews = JSON.parse(store.get(key()) || '{}'); } catch (e) { reviews = {}; }
+  $('pick').classList.add('hide'); $('app').classList.remove('hide'); $('whoName').textContent = n;
+  const sev = $('sevRow'); sev.replaceChildren();
+  [0, 1, 2, 3].forEach(s => { const b = el('button', String(s)); b.dataset.s = s; b.onclick = () => setSev(s); sev.appendChild(b); });
+  idx = (visible().find(i => !(reviews[mine[i].id] || {}).decision)) ?? 0;
+  render();
+}
+function visible() {
+  const f = $('filter').value;
+  return mine.map((p, i) => i).filter(i => {
+    const p = mine[i], r = reviews[p.id];
+    if (f === 'req') return p.flagged;
+    if (f === 'opt') return !p.flagged;
+    if (f === 'todo') return !r || !r.decision;
+    if (f === 'Yes') return r && r.decision === 'Yes';
+    if (f === 'diff') return r && r.decision && ((r.decision === 'Yes') !== p.flagged);
+    return true;
+  });
+}
+function persist() { store.set(key(), JSON.stringify(reviews)); }
+function render() {
+  const p = mine[idx]; if (!p) { $('img').removeAttribute('src'); $('pid').textContent = 'No photos in this view'; $('chips').replaceChildren(); $('stan').replaceChildren(); drawStrip(); return; }
+  const r = reviews[p.id] || {};
+  $('img').src = 'photos/' + p.id + '.jpg'; $('img').classList.remove('big');
+  const nx = mine[idx + 1]; if (nx) new Image().src = 'photos/' + nx.id + '.jpg';
+  $('pid').textContent = p.id; $('seg').textContent = p.segment;
+  const chips = $('chips'); chips.replaceChildren(p.flagged ? el('span', 'Required', 'chip req') : el('span', 'Optional', 'chip opt'));
+  const m = $('meta'); m.replaceChildren();
+  const maps = el('a', 'Open in Google Maps'); maps.href = `https://www.google.com/maps?q=${p.lat},${p.lon}`; maps.target = '_blank'; maps.rel = 'noopener';
+  [['Street segment', p.segment], ['Taken', p.time]].forEach(([k, v]) => m.append(el('b', k), el('span', v)));
+  m.append(el('b', 'Map'), maps);
+  const s = $('stan'); s.replaceChildren();
+  if (p.flagged) { s.append(el('div', `Stanley's final label: Problem (Yes), severity ${p.sev}`)); if (p.desc) s.append(el('div', p.desc)); }
+  else s.append(el('div', "Stanley's final label: no clear problem (No)"));
+  $('bYes').className = r.decision === 'Yes' ? 'sel-yes' : ''; $('bNo').className = r.decision === 'No' ? 'sel-no' : '';
+  document.querySelectorAll('#sevRow button').forEach(b => b.className = (r.severity != null && +b.dataset.s === r.severity) ? 'sel-sev' : '');
+  $('comment').value = r.comment || ''; $('status').textContent = r.updated_at ? 'Saved ' + r.updated_at : 'Not saved yet';
+  drawStrip();
+}
+function drawStrip() {
+  const strip = $('strip'); strip.replaceChildren();
+  const reqDone = mine.filter(p => p.flagged && (reviews[p.id] || {}).decision).length, reqN = mine.filter(p => p.flagged).length;
+  const optDone = mine.filter(p => !p.flagged && (reviews[p.id] || {}).decision).length, optN = mine.length - reqN;
+  $('prog').textContent = `Required ${reqDone}/${reqN} · Optional ${optDone}/${optN}`;
+  $('barfill').style.width = (reqN ? 100 * reqDone / reqN : 100) + '%';
+  const ban = $('banner');
+  if (reqN && reqDone === reqN) { ban.textContent = 'You reviewed all required photos. Thank you! Reviewing the optional ones is up to you. Press "Download my review" when you are done.'; ban.classList.remove('hide'); } else ban.classList.add('hide');
+  visible().forEach(i => {
+    const p = mine[i], r = reviews[p.id];
+    const half = r && !r.decision && (r.severity != null || (r.comment || '').trim());
+    const b = el('button', p.id, (r && r.decision ? 'done-' + r.decision.toLowerCase() : half ? 'partial' : (p.flagged ? 'req' : '')) + (i === idx ? ' cur' : ''));
+    b.onclick = () => { idx = i; render(); }; strip.appendChild(b);
+  });
+}
+function cur() { const p = mine[idx]; return reviews[p.id] || (reviews[p.id] = { decision: null, severity: null, comment: '' }); }
+function stamp() { const r = cur(); r.updated_at = new Date().toISOString().slice(0, 16).replace('T', ' '); persist(); $('status').textContent = 'Saved ' + r.updated_at; }
+function setDecision(v) { const r = cur(), auto = $('auto').checked; r.decision = (auto || r.decision !== v) ? v : null; stamp(); if (auto && r.decision) go(1); else render(); }
+function setSev(s) { const r = cur(); r.severity = r.severity === s ? null : s; stamp(); render(); }
+function go(d) {
+  const v = visible(); if (!v.length) return;
+  const pos = v.indexOf(idx);
+  if (pos === -1) idx = d > 0 ? (v.find(i => i > idx) ?? v[0]) : ([...v].reverse().find(i => i < idx) ?? v[v.length - 1]);
+  else idx = v[(pos + d + v.length) % v.length];
+  render();
+}
+$('bYes').onclick = () => setDecision('Yes'); $('bNo').onclick = () => setDecision('No');
+$('prev').onclick = () => go(-1); $('next').onclick = () => go(1);
+$('img').onclick = e => e.target.classList.toggle('big');
+$('filter').onchange = () => { const v = visible(); if (v.length && !v.includes(idx)) idx = v[0]; render(); };
+$('comment').oninput = e => { cur().comment = e.target.value; stamp(); };
+$('switch').onclick = () => { $('app').classList.add('hide'); $('pick').classList.remove('hide'); };
+document.addEventListener('keydown', e => {
+  if ($('app').classList.contains('hide') || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === 'ArrowRight') go(1); else if (e.key === 'ArrowLeft') go(-1);
+  else if (e.key === 'y' || e.key === 'Y') setDecision('Yes'); else if (e.key === 'n' || e.key === 'N') setDecision('No');
+  else if (['0', '1', '2', '3'].includes(e.key)) setSev(+e.key);
+});
+$('dlCsv').onclick = () => {
+  const esc = v => { let t = String(v == null ? '' : v); if (/^[=+\-@\t\r]/.test(t)) t = "'" + t; return '"' + t.replace(/"/g, '""') + '"'; };
+  const head = ['reviewer', 'photo_id', 'segment', 'required', 'stanley_label', 'my_decision', 'my_severity', 'my_comment', 'updated_at'];
+  const lines = [head.join(',')];
+  mine.forEach(p => { const r = reviews[p.id] || {}; lines.push([who, p.id, p.segment, p.flagged ? 'yes' : 'no', p.flagged ? 'Yes' : 'No', r.decision, r.severity, r.comment, r.updated_at].map(esc).join(',')); });
+  const a = el('a'); a.href = URL.createObjectURL(new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' })); a.download = `rockridge_review_${who}.csv`; a.click();
+};
+boot();
+</script>
+</body>
+</html>
